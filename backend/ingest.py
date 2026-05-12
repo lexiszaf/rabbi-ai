@@ -2,15 +2,15 @@
 import json
 import os
 from sentence_transformers import SentenceTransformer
-import chromadb
+from pinecone import Pinecone
 from dotenv import load_dotenv
 
 load_dotenv()
 
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
-client = chromadb.PersistentClient(path="./chroma_db")
-collection = client.get_or_create_collection("torah_texts")
+pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
+index = pc.Index("torah-texts")
 
 def chunk_text(text, source, chunk_size=400, overlap=50):
     words = text.split()
@@ -24,10 +24,8 @@ def ingest_json(filepath):
     with open(filepath) as f:
         data = json.load(f)
     
-    # Sefaria stores English text in "text" field
     text_data = data.get("text", [])
     
-    # Flatten nested lists (some books are nested)
     def flatten(lst):
         result = []
         for item in lst:
@@ -39,21 +37,28 @@ def ingest_json(filepath):
     
     passages = flatten(text_data)
     full_text = " ".join(passages)
-    source_name = data.get("book", filepath)
+    source_name = data.get("book", os.path.basename(filepath))
     
     chunks = chunk_text(full_text, source=source_name)
     
-    texts = [c["text"] for c in chunks]
-    embeddings = embedder.encode(texts, show_progress_bar=True).tolist()
-    ids = [f"{source_name}_{i}" for i in range(len(chunks))]
-    metadatas = [{"source": c["source"]} for c in chunks]
+    # Pinecone upserts in batches of 100
+    batch_size = 100
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i:i + batch_size]
+        texts = [c["text"] for c in batch]
+        embeddings = embedder.encode(texts).tolist()
+        
+        vectors = [
+            {
+                "id": f"{source_name}_{i + j}",
+                "values": embeddings[j],
+                "metadata": {"source": source_name, "text": texts[j]}
+            }
+            for j in range(len(batch))
+        ]
+        
+        index.upsert(vectors=vectors)
     
-    collection.add(
-        embeddings=embeddings,
-        documents=texts,
-        metadatas=metadatas,
-        ids=ids
-    )
     print(f"✅ Ingested {source_name}: {len(chunks)} chunks")
 
 if __name__ == "__main__":
@@ -61,4 +66,4 @@ if __name__ == "__main__":
     for filename in os.listdir(folder):
         if filename.endswith(".json"):
             ingest_json(f"{folder}/{filename}")
-    print("✅ All done! chroma_db is ready.")
+    print("✅ All done! Pinecone index is ready.")

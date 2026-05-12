@@ -1,15 +1,15 @@
 # backend/query.py
 import os
 from sentence_transformers import SentenceTransformer
-import chromadb
+from pinecone import Pinecone
 from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
 
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
-chroma = chromadb.PersistentClient(path="./chroma_db")
-collection = chroma.get_collection("torah_texts")
+pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
+index = pc.Index("torah-texts")
 groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
 SYSTEM_PROMPT = """You are an Orthodox rabbi, knowledgeable in halacha, Talmud, Torah, and Jewish philosophy. 
@@ -17,12 +17,11 @@ Answer questions directly and substantively, drawing from classical Jewish sourc
 You may use Hebrew and Aramaic terms where appropriate (e.g. mitzvot, chesed, mussar, b'ezrat Hashem) but always explain them briefly if they are central to the answer.
 Cite sources precisely when possible — e.g. "The Rambam writes in Hilchot De'ot..." or "As the Gemara in Shabbat 31a states..."
 Be direct, grounded, and serious — like a rav answering a she'ela.
-Try to speak like an actual orthodox rabbi in your tone, not like a robot. You can use terms a rabbi would use, and you can be warm and encouraging when appropriate. You can use terms a rabbi would use that are practical in Halacha, like She'ela (answer), or a term of encouragement like "b'ezrat Hashem" or "l'chaim". But avoid being overly flowery or poetic. Be clear and direct.
+Try to speak like an actual orthodox rabbi in your tone, not like a robot. You can use terms a rabbi would use, and you can be warm and encouraging when appropriate. But avoid being overly flowery or poetic. Be clear and direct.
 Don't use the term My child or anything lovey dovey like that. You are a rabbi, not a mother or a god.
 If the provided texts don't address the question, say so plainly and offer what general Torah perspective you can. Make answers feel direct and personal, don't give overall impersonal answers. Address the asker as "you" not saying "someone should". If the question is about a specific situation, try to address that situation directly and practically, not just giving general information."""
+
 def ask(question: str, history: list = []) -> dict:
-    print(f"DEBUG history length: {len(history)}", flush=True)  # add this line
-    
     # For short follow-ups, combine with previous question for better retrieval
     retrieval_query = question
     if history and len(question.split()) < 8:
@@ -30,24 +29,24 @@ def ask(question: str, history: list = []) -> dict:
     
     q_embedding = embedder.encode([retrieval_query]).tolist()[0]
     
-    results = collection.query(
-        query_embeddings=[q_embedding],
-        n_results=5
+    # Query Pinecone
+    results = index.query(
+        vector=q_embedding,
+        top_k=5,
+        include_metadata=True
     )
     
-    context_chunks = results["documents"][0]
-    sources = [m["source"] for m in results["metadatas"][0]]
+    context_chunks = [r["metadata"]["text"] for r in results["matches"]]
+    sources = [r["metadata"]["source"] for r in results["matches"]]
     context = "\n\n---\n\n".join(
         [f"[{sources[i]}]\n{chunk}" for i, chunk in enumerate(context_chunks)]
     )
 
-    # Build messages with history
     messages = []
     for turn in history:
         messages.append({"role": "user", "content": turn["user"]})
         messages.append({"role": "assistant", "content": turn["rabbi"]})
     
-    # Add current question with context
     messages.append({
         "role": "user",
         "content": f"Sources:\n{context}\n\nQuestion: {question}"
@@ -65,7 +64,6 @@ def ask(question: str, history: list = []) -> dict:
         "sources": list(set(sources))
     }
 
-# Quick test
 if __name__ == "__main__":
     result = ask("What does Jewish wisdom say about being a good person?")
     print("\n🤖 Rabbi says:\n")
