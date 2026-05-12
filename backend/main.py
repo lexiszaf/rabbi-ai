@@ -10,7 +10,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://rabbi-ai.vercel.app",  # update this once you know your Vercel URL
+        "https://rabbi-ai-9diu.vercel.app",
     ],
     allow_methods=["POST"],
     allow_headers=["*"],
