@@ -354,7 +354,7 @@ async function sendMessage(question?: string) {
           <div className="messages">
             {messages.map((m, i) => (
               <div key={i} className={`message-row ${m.role}`}>
-                <div className="sender">{m.role === "user" ? "You" : "Rabbi"}</div>
+                <div className="sender">{m.role === "user" ? "You" : "Rabbi Mikey"}</div>
                 <div className={`bubble ${m.role}`}>{m.content}</div>
                 {m.sources && m.sources.length > 0 && (
                   <div className="sources">📖 {m.sources.join(", ")}</div>
@@ -363,7 +363,7 @@ async function sendMessage(question?: string) {
             ))}
             {loading && (
               <div className="message-row rabbi">
-                <div className="sender">Rabbi</div>
+                <div className="sender">Rabbi Mikey</div>
                 <div className="thinking">
                   <div className="dot" />
                   <div className="dot" />
