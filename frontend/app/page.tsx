@@ -317,8 +317,8 @@ async function sendMessage(question?: string) {
 
       <div className="container">
         <div className="header">
-  <div className="logo">Ask a <span>Rabbi</span></div>
-  <div className="tagline">Real answers from Jewish wisdom</div>
+ <div className="logo">Ask <span>Rabbi Mikey</span></div>
+<div className="tagline">Real answers from Mike's Jewish wisdom</div>
   {started && (
     <button onClick={resetConversation} style={{
       marginTop: "10px",
